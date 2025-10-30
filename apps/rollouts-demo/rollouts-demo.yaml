@@ -1,0 +1,87 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: rollouts-demo
+  namespace: argo-rollouts-demo
+spec:
+  replicas: 5
+  revisionHistoryLimit: 3
+  strategy:
+    canary:
+      canaryService: rollouts-demo-canary
+      stableService: rollouts-demo-stable
+#      trafficRouting:
+#        # 若你沒裝 istio，可註解掉以下設定
+#        istio:
+#          virtualService:
+#            name: rollouts-demo-vsvc
+#            routes:
+#              - primary
+      steps:
+        - setWeight: 20
+        - pause: {duration: 30s}
+        - setWeight: 50
+        - pause: {duration: 60s}
+        - setWeight: 100
+  selector:
+    matchLabels:
+      app: rollouts-demo
+  template:
+    metadata:
+      labels:
+        app: rollouts-demo
+    spec:
+      containers:
+        - name: rollouts-demo
+          image: argoproj/rollouts-demo:blue  # blue / yellow / green 版本可替換測試
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rollouts-demo-stable
+  namespace: argo-rollouts-demo
+spec:
+  selector:
+    app: rollouts-demo
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rollouts-demo-canary
+  namespace: argo-rollouts-demo
+spec:
+  selector:
+    app: rollouts-demo
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+## 若你有使用 Istio，可加入這個 VirtualService
+#apiVersion: networking.istio.io/v1beta1
+#kind: VirtualService
+#metadata:
+#  name: rollouts-demo-vsvc
+#  namespace: argo-rollouts-demo
+#spec:
+#  gateways:
+#    - istio-system/istio-gateway
+#  hosts:
+#    - rollouts-demo.127.0.0.1.nip.io
+#  http:
+#    - name: primary
+#      route:
+#        - destination:
+#            host: rollouts-demo-stable
+#          weight: 100
